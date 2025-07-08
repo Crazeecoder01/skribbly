@@ -1,0 +1,32 @@
+
+generator client {
+  provider = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  rooms     Room[]   @relation("UsersInRooms")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  state     RoomState @default(WAITING)
+  maxParticipants  Int      @default(8)
+  createdAt DateTime  @default(now())
+  users     User[]    @relation("UsersInRooms")
+  createdBy String
+}
+
+enum RoomState {
+  WAITING
+  PLAYING
+  ENDED
+}
