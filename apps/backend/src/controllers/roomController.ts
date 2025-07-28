@@ -98,7 +98,7 @@ export const joinRoom: RequestHandler = async(req, res)=>{
         
      
         res.status(200).json({
-            message: 'User joined room successfully',
+            message: 'User joined the room successfully',
             room: {
                 id: room.id,
                 code: room.code,
