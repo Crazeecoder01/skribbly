@@ -23,11 +23,18 @@ export default function JoinRoomPage() {
     }
 
     try {
-      const userId = localStorage.getItem('userId');
+      const prevRoomData = localStorage.getItem('room');
+      if (prevRoomData) {
+        const prevRoom = JSON.parse(prevRoomData);
+        if (prevRoom.code === roomCode.trim().toUpperCase()) {
+          setError('You cannot enter the room again.');
+          return;
+        }
+      }
       const { data } = await axios.post(`${process.env.NEXT_PUBLIC_SOCKET_URL}/api/rooms/join`, {
         userName,
         roomCode: roomCode.trim().toUpperCase(),
-        userId : userId || null,
+        userId : null,
       });
 
       const { room, user } = data;

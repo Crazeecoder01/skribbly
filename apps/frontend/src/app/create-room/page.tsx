@@ -18,7 +18,6 @@ export default function CreateRoomPage(){
 
     const handleCreateRoom = async ()=>{
         clickSoundRef.current?.play();
-            
        
          setError('');
         if (!creatorName.trim()) {
