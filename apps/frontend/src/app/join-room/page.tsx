@@ -8,33 +8,45 @@ import axios from 'axios';
 export default function JoinRoomPage() {
   const [userName, setUserName] = useState('');
   const [roomCode, setRoomCode] = useState('');
+  const [joining, setJoining] = useState(false);
+
   const [error, setError] = useState('');
   const router = useRouter();
 
   const handleJoinRoom = async () => {
     setError('');
-
+     if (joining) return; 
+    setJoining(true);
     if (!userName.trim() || !roomCode.trim()) {
       setError('Please fill in both fields.');
       return;
     }
 
     try {
-      const { data } = await axios.post('http://localhost:4000/api/rooms/join', {
+      const userId = localStorage.getItem('userId');
+      const { data } = await axios.post(`${process.env.NEXT_PUBLIC_SOCKET_URL}/api/rooms/join`, {
         userName,
         roomCode: roomCode.trim().toUpperCase(),
+        userId : userId || null,
       });
 
       const { room, user } = data;
       console.log('Joined room:', room);
       console.log('User ID:', user.id);
-  
-      const socket = getSocket();
-      socket.emit('join-room', room.code);
+      if (joining) return; 
+      setJoining(true);
 
+      const socket = getSocket();
+     
    
       localStorage.setItem('room', JSON.stringify(room));
       localStorage.setItem('userId', user.id);
+
+      socket.emit('join-room', {
+        roomCode: room.code,
+        userId: user.id,
+      });
+
 
       router.push(`/room/${room.code}`);
     } catch (err) {
@@ -44,6 +56,8 @@ export default function JoinRoomPage() {
             message = err.response.data.error;
         }
         setError(message);
+    }finally{
+      setJoining(false);
     }
   };
 
@@ -68,14 +82,19 @@ export default function JoinRoomPage() {
     onChange={(e) => setRoomCode(e.target.value)}
     className="bg-white text-black text-center p-4 rounded-xl w-72 mb-6 border-4 border-pink-300 uppercase focus:outline-none focus:ring-4 focus:ring-pink-200 text-lg shadow-md transition-all duration-300"
     maxLength={6}
+    autoComplete="off"
   />
 
   <button
-    onClick={handleJoinRoom}
-    className="bg-green-500 hover:bg-green-600 text-white font-bold px-8 py-3 rounded-xl text-lg shadow-md transition-transform duration-300 hover:scale-105"
-  >
-    🚀 Join Room
-  </button>
+  onClick={handleJoinRoom}
+  disabled={joining}
+  className={`${
+    joining ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+  } bg-green-500 hover:bg-green-600 text-white font-bold px-8 py-3 rounded-xl text-lg shadow-md transition-transform duration-300`}
+>
+  🚀 {joining ? 'Joining...' : 'Join Room'}
+</button>
+
 
   {error && (
     <p className="text-red-300 mt-6 font-bold animate-pulse text-sm sm:text-base">

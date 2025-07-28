@@ -7,6 +7,7 @@ import { getSocket } from "@/lib/socket";
 export default function CreateRoomPage(){
     const [creatorName, setCreatorName] = useState<string>('');
     const [maxParticipants, setMaxParticipants] = useState(8);
+    const [rounds, setRounds] = useState(3);
     const clickSoundRef = useRef<HTMLAudioElement | null>(null);
     const [error, setError] = useState('');
     const router = useRouter();
@@ -26,14 +27,14 @@ export default function CreateRoomPage(){
         }
 
         try{
-            const {data} = await axios.post(`http://localhost:4000/api/rooms/create`, {
-                roomAdmin:creatorName, maxParticipants
+            const {data} = await axios.post(`${process.env.NEXT_PUBLIC_SOCKET_URL}/api/rooms/create`, {
+                roomAdmin:creatorName, maxParticipants, rounds
             })
             const { room } = data;
 
             const socket = getSocket();
-            socket.emit('join-room', room.code);
             
+            socket.emit('join-room', room.code);
             localStorage.setItem('room', JSON.stringify(room));
             localStorage.setItem('userId', room.users[0].id);
 
@@ -71,7 +72,16 @@ export default function CreateRoomPage(){
             onChange={(e) => setMaxParticipants(Number(e.target.value))}
             className="border-4 border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-300 text-lg text-center p-3 rounded-xl w-72 mb-6 transition-all duration-300"
         />
-
+        <p> Number of Rounds:</p>
+        <input
+            type="number"
+            min={1}
+            max={10}
+            value={rounds}
+            onChange={(e) => setRounds(Number(e.target.value))}
+            className="p-2 border rounded my-2"
+            placeholder="🎯 Number of Rounds"
+        />
         <button
             onClick={handleCreateRoom}
             className="bg-green-500 text-white px-8 py-3 rounded-xl text-lg hover:bg-green-600 hover:scale-105 transition-transform duration-300 shadow-md border-4 border-white"

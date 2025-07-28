@@ -1,10 +1,10 @@
-import { Request, Response, RequestHandler } from 'express';
+import { RequestHandler } from 'express';
 import { prisma } from '../lib/prisma';
 import { generateRoomCode } from '../utils/generateRoomCode';
 
 export const createRoom:RequestHandler = async(req, res)=>{
     try{
-        const {roomAdmin, maxParticipants} = req.body; 
+        const {roomAdmin, maxParticipants, rounds} = req.body; 
 
         if(!roomAdmin || typeof roomAdmin !== 'string') {
              res.status(400).json({ error: 'Room admin is required  and must be a string.' });
@@ -17,7 +17,10 @@ export const createRoom:RequestHandler = async(req, res)=>{
                 name: roomAdmin
             }
         });
-
+        const numberOfRounds = Number(rounds);
+        if (!numberOfRounds || numberOfRounds < 1 || numberOfRounds > 10) {
+            return res.status(400).json({ error: 'Rounds must be between 1 and 10' });
+        }
         const code = generateRoomCode();
 
         const room = await prisma.room.create({
@@ -25,6 +28,7 @@ export const createRoom:RequestHandler = async(req, res)=>{
                 code,
                 createdBy: user.id,
                 maxParticipants: roomSize,
+                rounds: numberOfRounds || 3, 
                 users:{
                     connect: {id: user.id}
                 }
@@ -43,8 +47,11 @@ export const createRoom:RequestHandler = async(req, res)=>{
 
 export const joinRoom: RequestHandler = async(req, res)=>{
     try{
-        const { userName, roomCode } = req.body;
-     
+        const { userName, roomCode, userId } = req.body;
+        
+        if(userId){
+            return;
+        }
         if (!userName || typeof userName !== 'string' || !roomCode || typeof roomCode !== 'string') {
             res.status(400).json({ error: 'userName and roomCode are required and must be strings.' });
             return
@@ -66,12 +73,17 @@ export const joinRoom: RequestHandler = async(req, res)=>{
             res.json({error:'Game has already started'});
             return;
         }
+        const alreadyInRoom = room.users.some((user: { id: string }) => user.id === userId);
+        if (alreadyInRoom) {
+            console.log(`[${userName}] is already in room ${roomCode}`);
+            return;
+        }
         const user = await prisma.user.create({
             data: {
                 name: userName,
             }
         });
-        const isAlreadyJoined = room.users.some((u) => u.id === user.id);
+        const isAlreadyJoined = room.users.some((u:{id: string}) => u.id === user.id);
         if(!isAlreadyJoined){
             await prisma.room.update({
                 where: { id: room.id },
@@ -143,3 +155,14 @@ export const startGame: RequestHandler = async (req, res) => {
     
     }
 }
+
+export const leaveRoom: RequestHandler = async (req, res) => {
+  const { userId } = req.body;
+  try {
+    await prisma.user.delete({ where: { id: userId } });
+    res.status(200).json({ message: 'Left room successfully' });
+  } catch (err) {
+    console.error('[leaveRoom error]', err);
+    res.status(500).json({ error: 'Could not leave room' });
+  }
+};

@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  backend:
+    image: guptahimanshu177/skribble-backend:latest
+    container_name: skribble-backend-1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    env_file: ./apps/backend/.env
+    expose:
+      - "4000:4000"
+    networks:
+      - skribble-network
+    
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    build:
+      context: .
+      dockerfile: dockerfile.nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - skribble-network
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+
+networks:
+  skribble-network:
+    driver: bridge

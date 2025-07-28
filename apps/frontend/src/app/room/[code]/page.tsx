@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSocket } from '@/lib/socket';
 import CanvasBoard, { CanvasBoardRef } from '@/components/CanvasBoard';
+import axios from 'axios';
 
 
 interface User {
@@ -24,11 +25,13 @@ export default function RoomPage() {
 
   const router = useRouter();
   const canvasRef = useRef<CanvasBoardRef>(null);
-
+  
+ 
   const [room, setRoom] = useState<Room | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [wordChoices, setWordChoices] = useState<string[]>([]);
   const [wordLength, setWordLength] = useState<number | null>(null);
@@ -37,6 +40,13 @@ export default function RoomPage() {
   const [timeLeft, setTimeLeft] = useState<number>(70);
   const [guess, setGuess] = useState<string>('');
   const [scoreBoard, setScoreBoard] = useState<Record<string, number>>({});
+  const [gameOver, setGameOver] = useState<boolean>(false);
+  const [finalScores, setFinalScores] = useState<Record<string, number>>({});
+  const [chatMessages, setChatMessages] = useState<{
+    userId: string;
+    message: string;
+    type: 'chat' | 'correct';
+  }[]>([]);
   const [turnSummary, setTurnSummary] = useState<{
     word: string;
     correctGuessers: string[];
@@ -44,6 +54,7 @@ export default function RoomPage() {
   } | null>(null);
   const socket = useRef(getSocket());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const joinedRoomRef = useRef(false);
   const handleWordSelect = (word: string) => {
     setSelectedWord(word);
     socket.current.emit('word-chosen', {
@@ -55,8 +66,7 @@ export default function RoomPage() {
   useEffect(() => {
     const storedRoom = localStorage.getItem('room');
     const storedUserId = localStorage.getItem('userId');
-    console.log(storedUserId);
-    //  console.log(users.length)
+   
     if (!storedRoom || !storedUserId) {
       router.push('/');
       return;
@@ -73,22 +83,43 @@ export default function RoomPage() {
     }
       
     const sock = socket.current;
+    sock.on('chat-message', ({ userId, message }) => {
+      setChatMessages((prev) => [
+        ...prev,
+        { userId, message, type: 'chat' }
+      ]);
+    });
+   
     
-    socket.current.emit('join-room', { roomCode: roomData.code, userId: storedUserId });
+    if (!joinedRoomRef.current && room?.code && userId) {
+      socket.current.emit('join-room', {
+        roomCode: room.code,
+        userId
+      });
+      joinedRoomRef.current = true;
+    }
    
     socket.current.on('room-updated', (updatedRoom: Room) => {
       setRoom(updatedRoom);
       setUsers(updatedRoom.users);
     });
     
-    socket.current.on('correct-guess',({userId, word})=>{
-      const guesser = users.find(u => u.id === userId);
-      // console.log("step4")
-      // console.log(guesser)
-      if (guesser) {
-        console.log(`User ${guesser.name} guessed the word: ${word}`);
-      }     
+    socket.current.on('correct-guess',({userId})=>{
+     
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            userId,
+            message: "guessed the word correctly! 🎉",
+            type: 'correct'
+          }
+        ]);
+           
     })
+    sock.on('game-ended', ({ scores }) => {
+      setGameOver(true);
+      setFinalScores(scores);
+    });
     socket.current.on('all-guessed', () => {
       setTimeLeft(70);
       if (intervalRef.current) {
@@ -105,7 +136,6 @@ export default function RoomPage() {
     })
     socket.current.on('start-turn', ({ drawerId, wordChoices }) => {
       setDrawerId(drawerId);
-      // console.log("start_turn drawer id: ",drawerId)
       if (canvasRef.current) {
         canvasRef.current.clearCanvas();
       }
@@ -117,7 +147,7 @@ export default function RoomPage() {
     socket.current.on('turn-started', ({ wordLength, drawerId }) => {
       setWordLength(wordLength);
       setDrawerId(drawerId);
-      // console.log("Turn started:", drawerId);
+      
       setTurnStarted(true);
       setTimeLeft(70);
       if (intervalRef.current) {
@@ -134,16 +164,16 @@ export default function RoomPage() {
       }, 1000);
     });
     sock.on('receive-path', (pathData) => {
-      // console.log("Received path:", pathData);
 
-      if (userId !== drawerId && canvasRef.current && 'path' in pathData) {
+      if (canvasRef.current && 'path' in pathData) {
         canvasRef.current.addPath(pathData);
       }
     });
-
+ 
     sock.on('update-scores', ({scores})=>{
       setScoreBoard(scores);
     })
+   
     sock.on('turn-ended',({word, correctGuessers, drawerId})=>{
       setTurnSummary({ word, correctGuessers, drawerId });
        setTimeout(() => {
@@ -157,6 +187,9 @@ export default function RoomPage() {
       sock.off('turn-started');
       sock.off('game-started');
       sock.off('correct-guess');
+      sock.off('chat-message');
+      sock.off('update-scores');
+      sock.off('game-ended');
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
@@ -171,8 +204,22 @@ export default function RoomPage() {
     );
   }
 
-  // console.log(drawerId, userId, room.users);
-  // console.log(room);
+  const handleLeaveRoom = async () => {
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_SOCKET_URL}/api/rooms/leave`, {
+        userId,
+      });
+
+      socket.current.emit('leave-room', { roomCode: room.code, userId });
+
+      localStorage.removeItem('room');
+      localStorage.removeItem('userId');
+      router.push('/');
+    } catch (err) {
+      console.error('Failed to leave room', err);
+      alert('Error leaving room. Please try again.');
+    }
+  }
   const isDrawer = userId === drawerId;
 
   return (
@@ -284,33 +331,69 @@ export default function RoomPage() {
                     pathData,
                   });
                 }}
-              />
+               />
 
-              {/* Guessing Area */}
-              {!isDrawer && (
-                <div className="mt-6 flex gap-3 items-center flex-wrap justify-center">
-                  <input
-                    type="text"
-                    value={guess}
-                    onChange={(e) => setGuess(e.target.value)}
-                    className="p-3 rounded-lg border-2 border-gray-400 text-blue-200 w-72 text-center text-lg font-semibold shadow bg-gray-700"
-                    placeholder={`🔤 Guess the word (${wordLength ?? '_'} letters)`}
-                  />
-                  <button
-                    onClick={() => {
-                      socket.current.emit('send-guess', {
-                        roomCode: room.code,
-                        guess,
-                        userId,
-                      });
-                      setGuess('');
-                    }}
-                    className="px-5 py-3 bg-green-600 hover:bg-green-700 rounded-xl text-white font-bold transition-transform hover:scale-105 shadow-md"
-                  >
-                    🎯 Guess
-                  </button>
+
+              {/* 💬 Chat & Guess Area */}
+              {(
+                <div className="w-full max-w-xl mt-6 flex flex-col gap-4">
+                  {/* Message List */}
+                  <div className="bg-gray-800 rounded-xl p-4 shadow-md h-60 overflow-y-auto">
+                    {chatMessages.map((msg, idx) => (
+                      <p
+                        key={idx}
+                        className={`text-sm mb-2 ${
+                          msg.type === 'correct' ? 'text-green-400 font-bold' : 'text-white'
+                        }`}
+                      >
+                        <strong>
+                          {users.find((u) => u.id === msg.userId)?.name || 'Unknown'}:
+                        </strong>{' '}
+                        {msg.message}
+                      </p>
+                    ))}
+                  </div>
+
+                  {/* Input Box */}
+                  {!isDrawer && (
+                    <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={guess}
+                      onChange={(e) => setGuess(e.target.value)}
+                      className="flex-grow p-3 rounded-lg border-2 border-gray-600 text-white bg-gray-700 placeholder-gray-400 shadow"
+                      placeholder={`💬 Chat or guess the word (${wordLength ?? '_'})`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && guess.trim()) {
+                          socket.current.emit('send-guess', {
+                            roomCode: room.code,
+                            guess,
+                            userId,
+                          });
+                          setGuess('');
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (!guess.trim()) return;
+                        socket.current?.emit('send-guess', {
+                          roomCode: room.code,
+                          guess,
+                          userId,
+                        });
+                        setGuess('');
+                      }}
+                      className="px-5 py-3 bg-green-600 hover:bg-green-700 rounded-xl text-white font-bold transition-transform hover:scale-105 shadow"
+                    >
+                      🚀 Send
+                    </button>
+                  </div>
+                  )}
+                  
                 </div>
               )}
+
             </>
           )}
         </div>
@@ -347,6 +430,32 @@ export default function RoomPage() {
           </div>
         </div>
       )}
+      {gameOver && (
+      <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center">
+          <h2 className="text-3xl font-bold text-gray-800 mb-6">🎉 Game Over!</h2>
+          <ul className="space-y-2 text-lg">
+            {Object.entries(finalScores).map(([id, score]) => {
+              const user = users.find(u => u.id === id);
+              return (
+                <li key={id} className="flex justify-between font-semibold">
+                  <span>{user?.name || 'Unknown'}</span>
+                  <span className="text-blue-600">{score}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-6 text-sm text-gray-500">Thanks for playing Skribbly!</p>
+          <button 
+            onClick={handleLeaveRoom}
+            className="mt-4 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg transition-transform hover:scale-105 shadow"
+          >
+            Leave Room
+          </button>
+        </div>
+      </div>
+    )}
+
     </main>
   );
 

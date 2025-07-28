@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Room" ADD COLUMN     "rounds" INTEGER NOT NULL DEFAULT 3;
