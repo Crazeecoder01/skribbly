@@ -1,14 +1,20 @@
+'use client';
+
 import React from 'react';
-import { useRoom } from '@/context/RoomContext';
 
-export default function WordPicker() {
-  const { wordChoices, handleWordSelect } = useRoom();
+interface WordSelectorProps {
+  wordChoices: string[];
+  handleWordSelect: (word: string) => void;
+}
 
+const WordSelector: React.FC<WordSelectorProps> = ({ wordChoices, handleWordSelect }) => {
   return (
     <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md text-center">
-      <h3 className="text-xl font-bold text-gray-800 mb-4">🧠 Pick a word to draw:</h3>
+      <h3 className="text-xl font-bold text-gray-800 mb-4">
+        🧠 Pick a word to draw:
+      </h3>
       <div className="flex flex-wrap justify-center gap-4">
-        {wordChoices.map((word: string) => (
+        {wordChoices.map((word) => (
           <button
             key={word}
             onClick={() => handleWordSelect(word)}
@@ -20,4 +26,6 @@ export default function WordPicker() {
       </div>
     </div>
   );
-}
+};
+
+export default WordSelector;

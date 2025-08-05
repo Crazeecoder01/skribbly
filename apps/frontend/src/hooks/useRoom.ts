@@ -1,15 +1,14 @@
 'use client';
-
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSocket } from '@/lib/socket';
 
-interface User {
+export interface User {
   id: string;
   name: string;
 }
 
-interface Room {
+export interface Room {
   id: string;
   code: string;
   users: User[];
@@ -18,50 +17,19 @@ interface Room {
   createdBy: string;
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   userId: string;
   message: string;
   type: 'chat' | 'correct';
 }
 
-interface TurnSummary {
+export interface TurnSummary {
   word: string;
   correctGuessers: string[];
   drawerId: string;
 }
 
-interface RoomContextType {
-  socket: ReturnType<typeof getSocket>;
-  room: Room | null;
-  users: User[];
-  userId: string | null;
-  drawerId: string | null;
-  gameStarted: boolean;
-  wordChoices: string[];
-  wordLength: number | null;
-  selectedWord: string | null;
-  turnStarted: boolean;
-  timeLeft: number;
-  guess: string;
-  setGuess: React.Dispatch<React.SetStateAction<string>>;
-  scoreBoard: Record<string, number>;
-  gameOver: boolean;
-  finalScores: Record<string, number>;
-  chatMessages: ChatMessage[];
-  turnSummary: TurnSummary | null;
-  handleWordSelect: (w: string) => void;
-}
-
-
-const RoomContext = createContext<RoomContextType | undefined>(undefined);
-
-export const useRoom = () => {
-  const context = useContext(RoomContext);
-  if (!context) throw new Error('useRoom must be used within RoomProvider');
-  return context;
-};
-
-export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function useRoom() {
   const router = useRouter();
   const socket = useRef(getSocket());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,16 +45,20 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [turnStarted, setTurnStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(70);
-  const [guess, setGuess] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [scoreBoard, setScoreBoard] = useState<Record<string, number>>({});
   const [gameOver, setGameOver] = useState(false);
   const [finalScores, setFinalScores] = useState<Record<string, number>>({});
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [turnSummary, setTurnSummary] = useState<TurnSummary | null>(null);
+
+  const isDrawer = userId === drawerId;
 
   const handleWordSelect = (word: string) => {
     setSelectedWord(word);
-    socket.current.emit('word-chosen', { roomCode: room?.code, word });
+    socket.current.emit('word-chosen', {
+      roomCode: room?.code,
+      word,
+    });
   };
 
   useEffect(() => {
@@ -102,7 +74,7 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRoom(roomData);
     setUsers(roomData.users);
     setUserId(storedUserId);
-    setDrawerId((prev) => prev || roomData.users[0].id);
+    if (!drawerId) setDrawerId(roomData.users[0]?.id);
 
     const sock = socket.current;
 
@@ -115,17 +87,21 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     sock.on('chat-message', ({ userId, message }) => {
-      setChatMessages((prev) => [...prev, { userId, message, type: 'chat' }]);
+      setChatMessages((prev) => [
+        ...prev,
+        { userId, message, type: 'chat' },
+      ]);
     });
 
     sock.on('correct-guess', ({ userId }) => {
-      const guesser = roomData.users.find((u) => u.id === userId);
-      if (guesser) {
-        setChatMessages((prev) => [
-          ...prev,
-          { userId, message: 'guessed the word correctly! 🎉', type: 'correct' },
-        ]);
-      }
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          userId,
+          message: 'guessed the word correctly! 🎉',
+          type: 'correct',
+        },
+      ]);
     });
 
     sock.on('room-updated', (updatedRoom: Room) => {
@@ -147,12 +123,12 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     sock.on('turn-started', ({ wordLength, drawerId }) => {
-      setDrawerId(drawerId);
       setWordLength(wordLength);
+      setDrawerId(drawerId);
       setTurnStarted(true);
       setTimeLeft(70);
-      if (intervalRef.current) clearInterval(intervalRef.current);
 
+      if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
@@ -169,18 +145,20 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (intervalRef.current) clearInterval(intervalRef.current);
     });
 
-    sock.on('update-scores', ({ scores }) => {
-      setScoreBoard(scores);
+    sock.on('game-ended', ({ scores }) => {
+      setGameOver(true);
+      setFinalScores(scores);
     });
 
     sock.on('turn-ended', ({ word, correctGuessers, drawerId }) => {
       setTurnSummary({ word, correctGuessers, drawerId });
-      setTimeout(() => setTurnSummary(null), 5000);
+      setTimeout(() => {
+        setTurnSummary(null);
+      }, 5000);
     });
 
-    sock.on('game-ended', ({ scores }) => {
-      setGameOver(true);
-      setFinalScores(scores);
+    sock.on('update-scores', ({ scores }) => {
+      setScoreBoard(scores);
     });
 
     return () => {
@@ -191,40 +169,31 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sock.off('start-turn');
       sock.off('turn-started');
       sock.off('all-guessed');
-      sock.off('update-scores');
-      sock.off('turn-ended');
       sock.off('game-ended');
+      sock.off('turn-ended');
+      sock.off('update-scores');
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [router]);
 
-  return (
-    <RoomContext.Provider
-      value={{
-        socket: socket.current,
-        room,
-        users,
-        userId,
-        drawerId,
-        gameStarted,
-        wordChoices,
-        wordLength,
-        selectedWord,
-        turnStarted,
-        timeLeft,
-        guess,
-        setGuess,
-        scoreBoard,
-        gameOver,
-        finalScores,
-        chatMessages,
-        turnSummary,
-        handleWordSelect,
-        // setSelectedWord,
-        // setTimeLeft,
-      }}
-    >
-      {children}
-    </RoomContext.Provider>
-  );
-};
+  return {
+    room,
+    userId,
+    users,
+    drawerId,
+    isDrawer,
+    gameStarted,
+    wordChoices,
+    selectedWord,
+    wordLength,
+    turnStarted,
+    timeLeft,
+    chatMessages,
+    scoreBoard,
+    gameOver,
+    finalScores,
+    turnSummary,
+    socket: socket.current,
+    handleWordSelect,
+  };
+}

@@ -1,18 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
 
 export default function Home() {
   const router = useRouter();
-  const clickSoundRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    clickSoundRef.current = new Audio('/click.wav'); 
-  }, []);
+  
 
   const handleClick = (path: string) => {
-    clickSoundRef.current?.play();
     setTimeout(() => router.push(path), 15);
   };
 

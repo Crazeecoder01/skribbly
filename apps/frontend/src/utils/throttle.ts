@@ -1,4 +1,4 @@
-import { SerializedPath } from "@/components/CanvasBoard";
+import { SerializedPath } from "@/components/canvas/CanvasBoard";
 export function throttle<T extends (...args: SerializedPath[]) => void>(
   fn: T,
   delay: number
