@@ -6,7 +6,7 @@ import roomRoutes from './routes/room';
 import { Server } from "socket.io";
 import http from 'http';
 import { emitRoomUpdate } from './socketEvents/room';
-import { handleGuessSubmission, handleWordChosen, proceedToNextTurn, startTurnCycle } from './socketEvents/turnManager';
+import { handleGuessSubmission, handlePlayerLeave, handleWordChosen, proceedToNextTurn, startTurnCycle } from './socketEvents/turnManager';
 import { setupSocketRedisAdapter } from './lib/setupSocketRedisAdapter';
 dotenv.config();
 
@@ -56,7 +56,7 @@ io.on('connection',(socket)=>{
     socket.data.userId = userId;
     socket.data.roomCode = roomCode;
     socket.join(roomCode);
-    // socketRoomMap.set(socket.id, roomCode);
+    socketRoomMap.set(socket.id, roomCode);
     console.log(`✅ User ${userId} joined room ${roomCode}`);
     await emitRoomUpdate(io, roomCode); 
   });
@@ -85,17 +85,15 @@ io.on('connection',(socket)=>{
   });
 
   socket.on('send-guess', async ({roomCode, guess, userId})=>{
+    // console.log(`Received guess "${guess}" from user ${userId} in room ${roomCode}`);
     await handleGuessSubmission(io, roomCode, guess, userId);
-
   })
   
   socket.on('leave-room', async ({ roomCode, userId }) => {
     try {
       socket.leave(roomCode);
-      // console.log(`User ${userId} left room ${roomCode}`);
-
       socketRoomMap.delete(socket.id);
-
+      handlePlayerLeave(io, roomCode, userId);
       await emitRoomUpdate(io, roomCode);
 
       io.to(roomCode).emit('chat-message', {
@@ -113,7 +111,12 @@ io.on('connection',(socket)=>{
     const roomCode = socketRoomMap.get(socket.id);
     if (roomCode) {
       socketRoomMap.delete(socket.id);
-      socket.emit(`User ${socket.id} left room ${roomCode}`);
+      handlePlayerLeave(io, roomCode, socket.id);
+      
+      io.to(roomCode).emit('chat-message', {
+        userId: 'system',
+        message: `⚡ User ${socket.id} disconnected.`,
+      });
     }
   });
 })

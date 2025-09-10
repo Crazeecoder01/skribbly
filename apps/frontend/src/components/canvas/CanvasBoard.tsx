@@ -28,7 +28,6 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
     const canvasElRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
 
-    // Throttle sending serialized path objects
     const throttledOnDraw = useRef(
       throttle((data: SerializedPath) => {
         onDraw?.(data);
@@ -51,7 +50,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
       clearCanvas: () => {
         if (fabricCanvasRef.current) {
           fabricCanvasRef.current.clear();
-          fabricCanvasRef.current.backgroundColor = 'white'; // reset background
+          fabricCanvasRef.current.backgroundColor = 'white'; 
           fabricCanvasRef.current.renderAll();
         }
       },
@@ -77,6 +76,8 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
 
       canvas.on('path:created', (event) => {
         if (isDrawer && onDraw && event.path) {
+          // caching the path --> still not tested
+          // event.path.set({ selectable: false, objectCaching: true });
           const serialized = event.path.toObject(['path']) as SerializedPath;
           throttledOnDraw(serialized);
         }
@@ -87,8 +88,6 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
         fabricCanvasRef.current = null;
       };
     }, [isDrawer]);
-
-    
 
     return (
       <div className="w-full flex justify-center items-center">

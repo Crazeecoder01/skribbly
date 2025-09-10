@@ -72,23 +72,32 @@ export const handleWordChosen = (io:Server, roomCode:string, word:string)=>{
     }, 70000);
 }
 export const handleGuessSubmission = (io:Server, roomCode:string, guess:string, userId:string)=>{
+      // console.log(`User ${userId} guessed "${guess}" in room ${roomCode}`);
       const data = roomTurnData[roomCode];
       if (!guess || typeof guess !== 'string' || guess.trim() === '') return;
 
-  
       if(!data) return;
+
       // if (userId === data.userIds[data.currentDrawerIndex]) return;
 
       if(data.chosenWord?.toLowerCase() === guess.trim().toLowerCase()){
-        if(!data.correctGuessers.includes(userId)){
-          data.correctGuessers.push(userId);
+        if (data.correctGuessers.includes(userId)) {
+          // console.log(`User ${userId} tried to guess again.`);
+          io.to(userId).emit('already-guessed', {
+            message: "You have already guessed correctly this round!"
+          });
+          return;
         }
+        
+        
         if (!data.scores[userId]) data.scores[userId] = 0;
         
         data.scores[userId] += (data.userIds.length * 50 - (data.correctGuessers.length * 10));
+        data.correctGuessers.push(userId);
+        console.log(`${data.correctGuessers.length}`);
         const drawerId  = data.userIds[data.currentDrawerIndex];
         if (!data.scores[drawerId]) data.scores[drawerId] = 0;
-        data.scores[drawerId] += 150;
+        data.scores[drawerId] += 50;
 
         io.to(roomCode).emit('update-scores',{
           scores: data.scores
@@ -120,6 +129,7 @@ export const proceedToNextTurn = (io:Server, roomCode:string)=>{
         scores: data.scores,
       });
       delete roomTurnData[roomCode];
+      if (data.timeout) clearTimeout(data.timeout);
       return;
     }
     
@@ -144,4 +154,42 @@ const pickRandomWords = (): string[] => {
     selected.add(randomWord);
   }
   return [...selected];
+};
+
+export const handlePlayerLeave = (io: Server, roomCode: string, userId: string) => {
+  const data = roomTurnData[roomCode];
+  if (!data) return;
+
+  // Remove from user list and scores
+  const leavingIndex = data.userIds.indexOf(userId);
+  data.userIds = data.userIds.filter(id => id !== userId);
+  delete data.scores[userId];
+  data.correctGuessers = data.correctGuessers.filter(id => id !== userId);
+
+  // Adjust drawer index if needed
+  if (leavingIndex >= 0 && leavingIndex < data.currentDrawerIndex) {
+    data.currentDrawerIndex -= 1;
+  }
+
+  // Case 1: Drawer left mid-turn
+  if (userId === data.userIds[data.currentDrawerIndex]) {
+    io.to(roomCode).emit('drawer-left', { userId });
+    if (data.timeout) clearTimeout(data.timeout);
+    proceedToNextTurn(io, roomCode);
+    return;
+  }
+
+  // Case 2: Guesser left and now all others guessed
+  if (data.correctGuessers.length === data.userIds.length - 1) {
+    if (data.timeout) clearTimeout(data.timeout);
+    io.to(roomCode).emit('all-guessed');
+    proceedToNextTurn(io, roomCode);
+  }
+
+  // Case 3: Not enough players
+  if (data.userIds.length < 2) {
+    if (data.timeout) clearTimeout(data.timeout);
+    io.to(roomCode).emit('game-ended', { scores: data.scores });
+    delete roomTurnData[roomCode];
+  }
 };

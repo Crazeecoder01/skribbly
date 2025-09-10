@@ -17,7 +17,7 @@ export default function CreateRoomPage() {
 
   return (
     <main className="flex flex-col items-center justify-center h-screen bg-rose-800 font-pressStart text-center px-4">
-      <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-black animate-bounce drop-shadow">
+      <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-white animate-bounce drop-shadow">
         🎨 Create Your Room
       </h1>
 

@@ -22,7 +22,7 @@ export default function Home() {
     >
       <div className="bg-black bg-opacity-60 px-8 py-10 rounded-3xl shadow-xl text-center">
         <h1 className="text-3xl sm:text-5xl mb-10 drop-shadow-xl animate-bounce">
-          🎨 Skribbly
+          <img src="https://skribbl.io/img/logo.gif" alt="Logo" />
         </h1>
 
         <div className="flex gap-6 justify-center flex-wrap">

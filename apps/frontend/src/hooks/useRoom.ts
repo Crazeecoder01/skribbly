@@ -92,8 +92,16 @@ export function useRoom() {
         { userId, message, type: 'chat' },
       ]);
     });
+    sock.on('already-guessed', ({ message }) => {
+      // console.log(`User ${userId} already guessed correctly!`);
 
+      setChatMessages((prev) => [
+        ...prev,
+        { userId: "system", message, type: "chat" },
+      ]);
+    });
     sock.on('correct-guess', ({ userId }) => {
+      // console.log(`User ${userId} guessed correctly!`);
       setChatMessages((prev) => [
         ...prev,
         {
